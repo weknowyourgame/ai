@@ -1340,11 +1340,21 @@ export async function generateText<
       } while (
         // Continue if:
         // 1. There are client tool calls that have all been executed or denied, OR
-        // 2. There are pending deferred results from provider-executed tools
+        // 2. There are pending deferred results from provider-executed tools AND
+        //    client output to send back with the next request.
+        //
+        // A pending deferred provider-tool result is only delivered by the
+        // provider in response to client tool outputs being sent back. Without
+        // client output to send, continuing would build a next request whose
+        // last message is the assistant turn (no following tool message) -
+        // which providers like Anthropic reject ("assistant message prefill
+        // not supported") - and could not deliver the deferred result anyway.
         ((clientToolCalls.length > 0 &&
           clientToolOutputs.length + deniedToolApprovalResponses.length ===
             clientToolCalls.length) ||
-          pendingDeferredToolCalls.size > 0) &&
+          (pendingDeferredToolCalls.size > 0 &&
+            (clientToolOutputs.length > 0 ||
+              deniedToolApprovalResponses.length > 0))) &&
         // continue until a stop condition is met:
         !(await isStopConditionMet({ stopConditions, steps }))
       );

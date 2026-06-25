@@ -2272,15 +2272,31 @@ class DefaultStreamTextResult<
                   clearStepTimeout();
                   clearChunkTimeout();
 
+                  // A pending deferred provider-tool result is only delivered by
+                  // the provider in response to client tool outputs being sent
+                  // back. If a step has pending deferred tools but no client
+                  // output to send, continuing would build a next request whose
+                  // last message is the assistant turn (no following tool
+                  // message) - which providers like Anthropic reject
+                  // ("assistant message prefill not supported") - and could not
+                  // deliver the deferred result anyway. So a pending deferred
+                  // result may only drive continuation when there is client
+                  // output to send back.
+                  const hasClientResultsToSend =
+                    clientToolOutputs.length > 0 ||
+                    deniedToolApprovalResponses.length > 0;
+
                   if (
                     // Continue if:
                     // 1. There are client tool calls that have all been executed or denied, OR
-                    // 2. There are pending deferred results from provider-executed tools, OR
+                    // 2. There are pending deferred results from provider-executed
+                    //    tools AND client output to send back with the next request.
                     ((clientToolCalls.length > 0 &&
                       clientToolCalls.length ===
                         clientToolOutputs.length +
                           deniedToolApprovalResponses.length) ||
-                      pendingDeferredToolCalls.size > 0) &&
+                      (pendingDeferredToolCalls.size > 0 &&
+                        hasClientResultsToSend)) &&
                     // continue until a stop condition is met:
                     !(await isStopConditionMet({
                       stopConditions,
